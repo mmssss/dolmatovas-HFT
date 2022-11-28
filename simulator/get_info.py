@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from tqdm.auto import tqdm
 from typing import List, Union
 
 from .simulator import MdUpdate, OwnTrade, update_best_positions
@@ -8,18 +7,18 @@ from .simulator import MdUpdate, OwnTrade, update_best_positions
 
 def get_pnl(updates_list: List[Union[MdUpdate, OwnTrade]]) -> pd.DataFrame:
     """ This function calculates PnL from list of updates """
-    # current position in btc and usd
-    btc_pos, usd_pos = 0.0, 0.0
-
+    base_pos, quote_pos = 0.0, 0.0  # current position in base and quote assets
+    volume = 0.0  # current trading volume in quote asset
     N = len(updates_list)
-    btc_pos_arr = np.zeros((N,))
-    usd_pos_arr = np.zeros((N,))
+    base_pos_arr = np.zeros((N,))
+    quote_pos_arr = np.zeros((N,))
     mid_price_arr = np.zeros((N,))
+    volume_arr = np.zeros((N,))
     # current best_bid and best_ask
     best_bid: float = -np.inf
     best_ask: float = np.inf
 
-    for i, update in tqdm(enumerate(updates_list)):
+    for i, update in enumerate(updates_list):
         if isinstance(update, MdUpdate):
             best_bid, best_ask = update_best_positions(best_bid, best_ask, update)
         # mid price
@@ -28,27 +27,29 @@ def get_pnl(updates_list: List[Union[MdUpdate, OwnTrade]]) -> pd.DataFrame:
 
         if isinstance(update, OwnTrade):
             trade = update
+            volume += trade.size
             # update positions
             if trade.side == 'BID':
-                btc_pos += trade.size
-                usd_pos -= trade.price * trade.size
-            elif trade.side == 'ASK':
-                btc_pos -= trade.size
-                usd_pos += trade.price * trade.size
-        # current portfolio value
+                base_pos += trade.size
+                quote_pos -= trade.price * trade.size
 
-        btc_pos_arr[i] = btc_pos
-        usd_pos_arr[i] = usd_pos
+            elif trade.side == 'ASK':
+                base_pos -= trade.size
+                quote_pos += trade.price * trade.size
+
+        base_pos_arr[i] = base_pos
+        volume_arr[i] = volume
+        quote_pos_arr[i] = quote_pos
         mid_price_arr[i] = mid_price
 
-    worth_arr = btc_pos_arr * mid_price_arr + usd_pos_arr
+    worth_arr = base_pos_arr * mid_price_arr + quote_pos_arr
     receive_ts = [update.receive_ts for update in updates_list]
     exchange_ts = [update.exchange_ts for update in updates_list]
 
     df = pd.DataFrame({"exchange_ts": exchange_ts, "receive_ts": receive_ts,
-                       "worth_quote": worth_arr, "base_balance": btc_pos_arr,
-                       "quote_balance": usd_pos_arr, "mid_price": mid_price_arr})
-    # df = df.groupby('receive_ts').agg(lambda x: x.iloc[-1]).reset_index()
+                       "worth_quote": worth_arr, "volume": volume_arr,
+                       "base_balance": base_pos_arr, "quote_balance": quote_pos_arr,
+                       "mid_price": mid_price_arr})
     return df
 
 
