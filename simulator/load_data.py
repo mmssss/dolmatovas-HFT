@@ -5,41 +5,59 @@ import pandas as pd
 from .simulator import AnonTrade, MdUpdate, OrderbookSnapshotUpdate
 
 
-def load_trades(path, nrows=10000) -> List[AnonTrade]:
+def load_before_time(path, T):
+    chunksize = 10 ** 5
+    chunks = []
+    t0 = None
+    for chunk in pd.read_csv(path, chunksize=chunksize):
+        if t0 is None:
+            t0 = chunk['receive_ts'].iloc[0]
+        chunks.append(chunk)
+        if chunk['receive_ts'].iloc[-1] - t0 >= T:
+            break
+    df = pd.concat(chunks)
+    mask = df['receive_ts'] - df['receive_ts'].iloc[0] < T
+    df = df.loc[mask]
+
+    return df
+
+
+def load_trades(path: str, T: int) -> List[AnonTrade]:
     """
         This function downloads trades data
 
         Args:
             path(str): path to file
-            nrows(int): number of rows to read
+            T(int): max timestamp from the first one in nanoseconds
 
         Return:
-            trades(List[AnonTrade]): list of trades
+            trades(List[AnonTrade]): list of trades 
     """
-    trades = pd.read_csv(path + 'trades.csv', nrows=nrows)
+    trades = load_before_time(path + 'trades.csv', T)
 
     # переставляю колонки, чтобы удобнее подавать их в конструктор AnonTrade
-    trades = trades[['exchange_ts', 'receive_ts', 'aggro_side', 'size', 'price']].sort_values(
-        ["exchange_ts", 'receive_ts'])
+    trades = trades[
+        ['exchange_ts', 'receive_ts', 'aggro_side', 'size', 'price']
+    ].sort_values(['exchange_ts', 'receive_ts'])
     receive_ts = trades.receive_ts.values
     exchange_ts = trades.exchange_ts.values
     trades = [AnonTrade(*args) for args in trades.values]
     return trades
 
 
-def load_books(path, nrows=10000) -> List[OrderbookSnapshotUpdate]:
+def load_books(path: str, T: int) -> List[OrderbookSnapshotUpdate]:
     """
         This function downloads orderbook market data
 
         Args:
             path(str): path to file
-            nrows(int): number of rows to read
+            T(int): max timestamp from the first one in nanoseconds
 
         Return:
-            books(List[OrderbookSnapshotUpdate]): list of orderbooks snapshots
+            books(List[OrderbookSnapshotUpdate]): list of orderbooks snapshots 
     """
-    lobs = pd.read_csv(path + 'lobs.csv', nrows=nrows)
-
+    lobs = load_before_time(path + 'lobs.csv', T)
+    
     # rename columns
     names = lobs.columns.values
     ln = len('btcusdt:Binance:LinearPerpetual_')
@@ -55,7 +73,7 @@ def load_books(path, nrows=10000) -> List[OrderbookSnapshotUpdate]:
     asks = [list(zip(lobs[f"ask_price_{i}"], lobs[f"ask_vol_{i}"])) for i in range(10)]
     # транспонируем список
     asks = [[asks[i][j] for i in range(len(asks))] for j in range(len(asks[0]))]
-    # тоже самое с бидами
+    # то же самое с бидами
     bids = [list(zip(lobs[f"bid_price_{i}"], lobs[f"bid_vol_{i}"])) for i in range(10)]
     bids = [[bids[i][j] for i in range(len(bids))] for j in range(len(bids[0]))]
 
