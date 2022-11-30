@@ -1,14 +1,10 @@
+import numpy as np
+from collections import deque, defaultdict
 from typing import List, Optional, Tuple, Union, Dict, Deque
 
-from collections import deque, defaultdict
-import numpy as np
-import pandas as pd
-
-from simulator import MdUpdate, Order, OwnTrade, Sim
-
-
-from utils import get_mid_price, update_best_positions, Order, OwnTrade, MdUpdate
-
+from .simulator import Sim
+from .utils import get_mid_price, update_best_positions,\
+    MdUpdate, Order, OwnTrade, MdUpdate
 
 
 class BaseStrategy:

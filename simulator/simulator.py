@@ -1,13 +1,11 @@
 from collections import deque
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union, Deque, Dict
 from tqdm.auto import tqdm
 
 import numpy as np
-from sortedcontainers import SortedDict
 
-from utils import Order, CancelOrder, AnonTrade, OwnTrade, OrderbookSnapshotUpdate, \
-                  MdUpdate, update_best_positions, get_mid_price, PriorQueue
+from .utils import Order, CancelOrder, OwnTrade, MdUpdate, \
+    update_best_positions, PriorQueue
 
 
 class Sim:
