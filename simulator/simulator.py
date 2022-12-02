@@ -16,6 +16,9 @@ class Sim:
                 execution_latency(float): latency in nanoseconds
                 md_latency(float): latency in nanoseconds
         '''
+        # TODO: add parameter to indicate whether our orders shold be
+        #       last or first in queue on the level (whichever is less
+        #       optimistic for specific strategy)
         #transform md to queue
         self.md_queue = deque( market_data )
         #action queue
