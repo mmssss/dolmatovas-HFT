@@ -6,21 +6,25 @@ import pandas as pd
 from .simulator import MdUpdate, OwnTrade, update_best_positions
 
 
-def get_metrics(updates_list: List[Union[MdUpdate, OwnTrade]], fee) -> pd.DataFrame:
+def get_metrics(updates_list: List[Union[MdUpdate, OwnTrade]], fee_maker, fee_taker) -> pd.DataFrame:
     """Calculate PnL and other metrics from list of updates returned by the strategy.
     Args:
         updates_list: list of updates as returned by the strategy.
-        fee: Maker/taker fee (a fraction, not percent)
+        fee_maker: Maker fee (a fraction, not percent)
+        fee_taker: Taker fee (a fraction, not percent)
     Returns:
-        Data frame with PnL and other statistics.
+        Data frame with PnL and other metrics.
     """
     base_pos, quote_pos = 0.0, 0.0  # current position in base and quote assets
-    volume = 0.0  # current trading volume in quote asset
+    # current trading volume in quote asset
+    volume_maker = 0.0
+    volume_taker = 0.0
     N = len(updates_list)
     base_pos_arr = np.zeros((N,))
     quote_pos_arr = np.zeros((N,))
     mid_price_arr = np.zeros((N,))
-    volume_arr = np.zeros((N,))
+    volume_maker_arr = np.zeros((N,))
+    volume_taker_arr = np.zeros((N,))
     # current best_bid and best_ask
     best_bid: float = -np.inf
     best_ask: float = np.inf
@@ -33,7 +37,10 @@ def get_metrics(updates_list: List[Union[MdUpdate, OwnTrade]], fee) -> pd.DataFr
 
         if isinstance(update, OwnTrade):
             trade = update
-            volume += trade.size
+            if trade.type == 'MAKER':
+                volume_maker += trade.size
+            else:
+                volume_taker += trade.size
             # update positions
             if trade.side == 'BID':
                 base_pos += trade.size
@@ -41,11 +48,13 @@ def get_metrics(updates_list: List[Union[MdUpdate, OwnTrade]], fee) -> pd.DataFr
             elif trade.side == 'ASK':
                 base_pos -= trade.size
                 quote_pos += trade.price * trade.size
-            # on Binance futures, fees are deducted like this
+            # on Binance Futures, fees are deducted like this
+            fee = fee_maker if trade.type == 'MAKER' else fee_taker
             quote_pos -= fee * trade.price * trade.size
 
         base_pos_arr[i] = base_pos
-        volume_arr[i] = volume
+        volume_maker_arr[i] = volume_maker
+        volume_taker_arr[i] = volume_taker
         quote_pos_arr[i] = quote_pos
         mid_price_arr[i] = mid_price
 
@@ -54,8 +63,11 @@ def get_metrics(updates_list: List[Union[MdUpdate, OwnTrade]], fee) -> pd.DataFr
     exchange_ts = [update.exchange_ts for update in updates_list]
 
     df = pd.DataFrame({"exchange_ts": exchange_ts, "receive_ts": receive_ts,
-                       "worth_quote": worth_arr, "volume": volume_arr,
-                       "base_balance": base_pos_arr, "quote_balance": quote_pos_arr,
+                       "worth_quote": worth_arr,
+                       "volume_maker": volume_maker_arr,
+                       "volume_taker": volume_taker_arr,
+                       "base_balance": base_pos_arr,
+                       "quote_balance": quote_pos_arr,
                        "mid_price": mid_price_arr})
     df['exchange_ts'] = pd.to_datetime(df['exchange_ts'])
     df['receive_ts'] = pd.to_datetime(df['receive_ts'])
