@@ -9,12 +9,14 @@ from .utils import Order, CancelOrder, OwnTrade, MdUpdate, \
 
 
 class Sim:
-    def __init__(self, market_data: List[MdUpdate], execution_latency: float, md_latency: float) -> None:
+    def __init__(self, market_data: List[MdUpdate], execution_latency: float,
+                 md_latency: float, show_progress: bool = True) -> None:
         """Exchange simulator.
             Args:
                 market_data(List[MdUpdate]): market data
                 execution_latency(float): latency in nanoseconds
                 md_latency(float): latency in nanoseconds
+                show_progress(bool): whether to display progress bar
         """
         # TODO: add parameter to indicate whether our orders shold be
         #       last or first in queue on the level (whichever is less
@@ -43,7 +45,11 @@ class Sim:
         self.trade_price = {'BID': -np.inf, 'ASK': np.inf}
         # last order
         self.last_order: Optional[Order] = None
-        self.progress_bar = tqdm(total=len(self.md_queue))
+
+        if show_progress:
+            self.progress_bar = tqdm(total=len(self.md_queue))
+        else:
+            self.progress_bar = None
 
     def get_md_queue_event_time(self) -> np.float:
         return np.inf if len(self.md_queue) == 0 else self.md_queue[0].exchange_ts
@@ -122,7 +128,8 @@ class Sim:
             call_execute = md_queue_et <= actions_queue_et
             if md_queue_et <= actions_queue_et:
                 self.update_md(self.md_queue.popleft())
-                self.progress_bar.update(1)
+                if self.progress_bar is not None:
+                    self.progress_bar.update(1)
             if actions_queue_et <= md_queue_et:
                 self.update_action(self.actions_queue.popleft())
                 # execute last order aggressively

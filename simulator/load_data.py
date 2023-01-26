@@ -7,11 +7,11 @@ def load_md_interval(path: str,
                      min_ts: Optional[pd.Timestamp] = None,
                      max_ts: Optional[pd.Timestamp] = None) -> pd.DataFrame:
     if min_ts is None and max_ts is None:
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, skipinitialspace=True)
     else:
         chunksize = 100_000
         chunks = []
-        for chunk in pd.read_csv(path, chunksize=chunksize):
+        for chunk in pd.read_csv(path, chunksize=chunksize, skipinitialspace=True):
             if min_ts is not None and chunk['receive_ts'].iloc[-1] < min_ts.value:
                 pass
             if max_ts is not None and chunk['receive_ts'].iloc[0] > max_ts.value:
@@ -30,7 +30,7 @@ def load_md_interval(path: str,
 def load_trades(path: str,
                 min_ts: Optional[pd.Timestamp] = None,
                 max_ts: Optional[pd.Timestamp] = None) -> List[AnonTrade]:
-    trades = load_md_interval(path + 'trades.csv', min_ts, max_ts)
+    trades = load_md_interval(path, min_ts, max_ts)
     # permute the columns to pass parameters to AnonTrade constructor
     trades = trades[
         ['exchange_ts', 'receive_ts', 'aggro_side', 'size', 'price']
@@ -42,14 +42,13 @@ def load_trades(path: str,
 def load_books(path: str,
                min_ts: Optional[pd.Timestamp] = None,
                max_ts: Optional[pd.Timestamp] = None) -> List[OrderbookSnapshotUpdate]:
-    lobs = load_md_interval(path + 'lobs.csv', min_ts, max_ts)
+    lobs = load_md_interval(path, min_ts, max_ts)
 
     # rename columns
-    names = lobs.columns.values
-    ln = len('btcusdt:Binance:LinearPerpetual_')
-    renamer = {name: name[ln:] for name in names[2:]}
-    renamer[' exchange_ts'] = 'exchange_ts'
-    lobs.rename(renamer, axis=1, inplace=True)
+    new_names = {}
+    for name in lobs.columns[2:]:
+        new_names[name] = name[name.find('_') + 1:]
+    lobs.rename(columns=new_names, inplace=True)
 
     # timestamps
     receive_ts = lobs.receive_ts.values
@@ -73,20 +72,24 @@ def merge_books_and_trades(books: List[OrderbookSnapshotUpdate],
     trades_dict = {(trade.exchange_ts, trade.receive_ts): trade for trade in trades}
     books_dict = {(book.exchange_ts, book.receive_ts): book for book in books}
 
-    ts = sorted(trades_dict.keys() | books_dict.keys())
+    # for sorting, give receive_ts higher priority, because this is the order
+    # in which we receive market data when running the strategy in real-time
+    ts = sorted(trades_dict.keys() | books_dict.keys(), key=lambda x: (x[1], x[0]))
 
     md = [MdUpdate(*key, books_dict.get(key, None), trades_dict.get(key, None)) for key in ts]
     return md
 
 
-def load_md_from_file(path: str,
+def load_md_from_file(lobs_path: str, trades_path: str,
                       min_ts: Optional[pd.Timestamp] = None,
                       max_ts: Optional[pd.Timestamp] = None) -> List[MdUpdate]:
     """Load market data from specified time interval.
 
     Args:
-        path:
-            Path to the directory with market data.
+        lobs_path:
+            Path to the CSV file with limit order book snapshots.
+        trades_path:
+            Path to the CSV file with trades data.
         min_ts:
             If provided, market data with reception timestamps less
             than `min_ts` will not be included in resulting data frame.
@@ -97,6 +100,6 @@ def load_md_from_file(path: str,
     Returns:
         A data frame with market data.
     """
-    books = load_books(path, min_ts, max_ts)
-    trades = load_trades(path, min_ts, max_ts)
+    books = load_books(lobs_path, min_ts, max_ts)
+    trades = load_trades(trades_path, min_ts, max_ts)
     return merge_books_and_trades(books, trades)
