@@ -5,8 +5,9 @@ import numpy as np
 from sortedcontainers import SortedDict
 
 __all__ = [
-    'Order', 'CancelOrder', 'AnonTrade', 'OwnTrade', 'OrderbookSnapshotUpdate',
-    'MdUpdate', 'update_best_positions', 'get_mid_price', 'PriorQueue'
+    'Order', 'CancelOrder', 'MarketOrder', 'AnonTrade', 'OwnTrade',
+    'OrderbookSnapshotUpdate', 'MdUpdate', 'update_best_positions',
+    'get_mid_price', 'PriorQueue'
 ]
 
 
@@ -22,6 +23,15 @@ class Order:  # Our own placed order
 
     def __post_init__(self):
         assert self.type == 'LIMIT' or self.type == 'POST_ONLY'
+
+
+@dataclass
+class MarketOrder:  # Our own placed order
+    place_ts : float # ts when we place the order
+    exchange_ts : float # ts when exchange(simulator) get the order
+    order_id: int
+    side: str
+    size: float
 
 
 @dataclass
