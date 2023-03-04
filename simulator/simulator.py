@@ -4,7 +4,7 @@ from tqdm.auto import tqdm
 
 import numpy as np
 
-from .utils import Order, CancelOrder, MarketOrder, OwnTrade, MdUpdate, \
+from .utils import Order, CancelOrder, OwnTrade, MdUpdate, \
     update_best_positions, PriorQueue
 
 
@@ -24,7 +24,7 @@ class Sim:
         # transform md to queue
         self.md_queue = deque(market_data)
         # action queue
-        self.actions_queue: Deque[Union[Order, MarketOrder, CancelOrder]] = deque()
+        self.actions_queue: Deque[Union[Order, CancelOrder]] = deque()
         # SordetDict: receive_ts -> [updates]
         self.strategy_updates_queue = PriorQueue()
         # map : order_id -> Order
@@ -100,14 +100,6 @@ class Sim:
             # cancel order
             if action.id_to_delete in self.ready_to_execute_orders:
                 self.ready_to_execute_orders.pop(action.id_to_delete)
-        elif isinstance(action, MarketOrder):
-            price = self.best_bid if action.side == 'ASK' else self.best_ask
-            self.last_order = Order( action.place_ts,
-                                     action.exchange_ts,
-                                     action.order_id,
-                                     action.side,
-                                     action.size,
-                                     price)
         else:
             assert False, "Wrong action type!"
 
@@ -161,9 +153,9 @@ class Sim:
 
         executed_price = None
 
-        if self.last_order.side == 'BID' and self.last_order.price >= self.best_ask:
+        if self.last_order.side == 'BID' and self.last_order.price > self.best_ask:
             executed_price = self.best_ask
-        elif self.last_order.side == 'ASK' and self.last_order.price <= self.best_bid:
+        elif self.last_order.side == 'ASK' and self.last_order.price < self.best_bid:
             executed_price = self.best_bid
 
         if executed_price is not None:
@@ -193,16 +185,16 @@ class Sim:
         for order_id, order in self.ready_to_execute_orders.items():
             executed_price, execute = None, None
 
-            if order.side == 'BID' and order.price >= self.best_ask:
+            if order.side == 'BID' and order.price > self.best_ask:
                 executed_price = order.price
                 execute = 'BOOK'
-            elif order.side == 'ASK' and order.price <= self.best_bid:
+            elif order.side == 'ASK' and order.price < self.best_bid:
                 executed_price = order.price
                 execute = 'BOOK'
-            elif order.side == 'BID' and order.price >= self.trade_price['ASK']:
+            elif order.side == 'BID' and order.price > self.trade_price['ASK']:
                 executed_price = order.price
                 execute = 'TRADE'
-            elif order.side == 'ASK' and order.price <= self.trade_price['BID']:
+            elif order.side == 'ASK' and order.price < self.trade_price['BID']:
                 executed_price = order.price
                 execute = 'TRADE'
 
@@ -234,12 +226,6 @@ class Sim:
                       price, order_type)
         self.actions_queue.append(order)
         return order
-
-
-    def place_market_order(self, ts, size, side) -> None:
-        market_order = MarketOrder(ts, ts + self.latency, self.get_order_id(), side, size)
-        pass
-
 
     def cancel_order(self, ts: float, id_to_delete: int) -> CancelOrder:
         # добавляем заявку на удаление
